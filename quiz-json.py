@@ -29,7 +29,7 @@ def parse_special_json(data):
                 
             try:
                 q_data = json.loads(block)
-                if "pergunta" in q_data and "opcoes" in q_data and "resposta_correta" in q_data:
+                if "pergunta" in q_data and "resposta_correta" in q_data:
                     questions.append(q_data)
             except json.JSONDecodeError:
                 pass
@@ -56,8 +56,15 @@ def load_questions(uploaded_file):
             # Validate each question has the required fields
             valid_questions = []
             for q in data:
-                if isinstance(q, dict) and "pergunta" in q and "opcoes" in q and "resposta_correta" in q:
-                    valid_questions.append(q)
+                if isinstance(q, dict) and "pergunta" in q and "resposta_correta" in q:
+                    # Handle true/false questions
+                    if "tipo" in q and q["tipo"] == "verdadeiro_falso":
+                        if "opcoes" not in q:
+                            q["opcoes"] = ["Verdadeiro", "Falso"]
+                        valid_questions.append(q)
+                    # Handle multiple choice questions
+                    elif "opcoes" in q and isinstance(q["opcoes"], list) and len(q["opcoes"]) > 0:
+                        valid_questions.append(q)
             
             if valid_questions:
                 return valid_questions
@@ -91,54 +98,88 @@ def initialize_session_state(questions):
 def show_question_feedback(question, index):
     """Display feedback after a question is answered"""
     user_answer = st.session_state[f"answer_{index}"]
-    is_correct = user_answer == question["resposta_correta"]
+    is_true_false = question.get("tipo") == "verdadeiro_falso"
     
-    # Show all options with color feedback
-    cols = st.columns(2)
-    for i, option in enumerate(question["opcoes"]):
-        with cols[i % 2]:
-            # Apply CSS styling directly through markdown
-            if i == question["resposta_correta"]:
-                st.markdown(f"""
-                <div style="background-color: #4CAF50; color: white; border-radius: 0.5rem; 
-                padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">
-                {option} ✓
-                </div>
-                """, unsafe_allow_html=True)
-            elif i == user_answer and not is_correct:
-                st.markdown(f"""
-                <div style="background-color: #F44336; color: white; border-radius: 0.5rem; 
-                padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">
-                {option} ❌
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div style="background-color: #E0E0E0; color: black; border-radius: 0.5rem; 
-                padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">
-                {option}
-                </div>
-                """, unsafe_allow_html=True)
+    # Handle true/false feedback
+    if is_true_false:
+        is_correct = user_answer == question["resposta_correta"]
+        correct_text = question["resposta_correta"]
+        
+        # Show feedback
+        if is_correct:
+            st.success(f"✅ Correct! The answer is: {correct_text}")
+        else:
+            st.error(f"❌ Incorrect. The correct answer is: {correct_text}")
     
-    # Show additional feedback
-    if is_correct:
-        st.success("✅ Correct answer!")
+    # Handle multiple choice feedback
     else:
-        st.error(f"❌ Incorrect. The correct answer is: {question['opcoes'][question['resposta_correta']]}")
+        is_correct = user_answer == question["resposta_correta"]
+        correct_option = question["opcoes"][question["resposta_correta"]]
+        
+        # Show all options with color feedback
+        cols = st.columns(2)
+        for i, option in enumerate(question["opcoes"]):
+            with cols[i % 2]:
+                # Apply CSS styling directly through markdown
+                if i == question["resposta_correta"]:
+                    st.markdown(f"""
+                    <div style="background-color: #4CAF50; color: white; border-radius: 0.5rem; 
+                    padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">
+                    {option} ✓
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif i == user_answer and not is_correct:
+                    st.markdown(f"""
+                    <div style="background-color: #F44336; color: white; border-radius: 0.5rem; 
+                    padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">
+                    {option} ❌
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style="background-color: #E0E0E0; color: black; border-radius: 0.5rem; 
+                    padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">
+                    {option}
+                    </div>
+                    """, unsafe_allow_html=True)
+        
+        # Show additional feedback
+        if is_correct:
+            st.success("✅ Correct answer!")
+        else:
+            st.error(f"❌ Incorrect. The correct answer is: {correct_option}")
     
+    # Show explanation if available
     if "explicacao" in question:
         st.info(f"Explanation: {question['explicacao']}")
 
 def show_question_options(question, index):
     """Display interactive question options"""
-    cols = st.columns(2)
+    is_true_false = question.get("tipo") == "verdadeiro_falso"
     options = question.get("opcoes", [])
-    for i, option in enumerate(options):
-        with cols[i % 2]:
-            if st.button(option, key=f"button_{index}_{i}"):
-                st.session_state[f"answer_{index}"] = i
+    
+    if is_true_false:
+        # Special layout for true/false questions
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Verdadeiro", key=f"button_{index}_true", use_container_width=True):
+                st.session_state[f"answer_{index}"] = "Verdadeiro"
                 st.session_state[f"answered_{index}"] = True
                 st.rerun()
+        with col2:
+            if st.button("Falso", key=f"button_{index}_false", use_container_width=True):
+                st.session_state[f"answer_{index}"] = "Falso"
+                st.session_state[f"answered_{index}"] = True
+                st.rerun()
+    else:
+        # Standard layout for multiple choice
+        cols = st.columns(2)
+        for i, option in enumerate(options):
+            with cols[i % 2]:
+                if st.button(option, key=f"button_{index}_{i}", use_container_width=True):
+                    st.session_state[f"answer_{index}"] = i
+                    st.session_state[f"answered_{index}"] = True
+                    st.rerun()
 
 def display_question(question, index):
     """Display a single question with its options"""
@@ -146,7 +187,12 @@ def display_question(question, index):
         st.error(f"Invalid question format for question {index + 1}")
         return
     
+    # Add question type indicator
+    question_type = question.get("tipo", "multipla_escolha")
+    type_badge = "🔘 Múltipla Escolha" if question_type == "multipla_escolha" else "✅❌ Verdadeiro/Falso"
+    
     st.subheader(f"Question {index + 1}: {question['pergunta']}")
+    st.caption(type_badge)
     
     # Initialize question state if not exists
     if f"answer_{index}" not in st.session_state:
@@ -172,7 +218,7 @@ def show_navigation_controls():
     col1, col2, col3 = st.columns([1, 1, 1])
     
     with col1:
-        if st.button("⏮ Previous") and st.session_state.current_question > 0:
+        if st.button("⏮ Previous", use_container_width=True) and st.session_state.current_question > 0:
             st.session_state.current_question -= 1
             st.rerun()
     
@@ -180,18 +226,30 @@ def show_navigation_controls():
         st.write(f"Question {st.session_state.current_question + 1}/{total}")
     
     with col3:
-        if st.button("Next ⏭") and st.session_state.current_question < total - 1:
+        if st.button("Next ⏭", use_container_width=True) and st.session_state.current_question < total - 1:
             st.session_state.current_question += 1
             st.rerun()
 
 def show_final_score():
     """Display final score when all questions are answered"""
     total = len(st.session_state.questions)
-    correct = sum(
-        1 for i in range(total)
-        if st.session_state[f"answer_{i}"] == st.session_state.questions[i]["resposta_correta"]
-    )
+    correct = 0
+    
+    for i in range(total):
+        question = st.session_state.questions[i]
+        user_answer = st.session_state[f"answer_{i}"]
+        
+        # Handle true/false scoring
+        if question.get("tipo") == "verdadeiro_falso":
+            if user_answer == question["resposta_correta"]:
+                correct += 1
+        # Handle multiple choice scoring
+        else:
+            if user_answer == question["resposta_correta"]:
+                correct += 1
+    
     st.success(f"🎉 Quiz completed! Score: {correct}/{total} ({correct/total:.0%})")
+    st.balloons()
 
 def main():
     st.title("📝 Quiz Application")
@@ -218,12 +276,6 @@ def main():
                 show_final_score()
         else:
             st.error("Could not load valid questions from the file")
-
-# Optional: Add a way to use the slide1.json data directly
-def use_sample_questions():
-    """Use a predefined set of questions for demonstration"""
-    st.write("Using sample questions...")
-    # Add your sample JSON handling here
 
 if __name__ == "__main__":
     main()
