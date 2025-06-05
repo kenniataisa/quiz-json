@@ -1,165 +1,132 @@
 import streamlit as st
 import json
 
-# Page configuration
 st.set_page_config(page_title="Quiz App", page_icon="❓")
 
+
 def parse_special_json(data):
-    """Parse the special JSON format from slide1.json"""
     raw_text = ""
     for item in data:
-        for key, value in item.items():
-            # Add each value to the raw text
+        for _, value in item.items():
             raw_text += value
-    
+
     try:
-        # Try to parse the reconstructed JSON text
         questions = []
         json_text = raw_text.replace("[", "").replace("]", "")
         json_blocks = json_text.split("}{")
-        
+
         for i, block in enumerate(json_blocks):
-            # Fix the JSON blocks
             if i == 0:
                 block = block + "}"
             elif i == len(json_blocks) - 1:
                 block = "{" + block
             else:
                 block = "{" + block + "}"
-                
+
             try:
                 q_data = json.loads(block)
                 if "pergunta" in q_data and "resposta_correta" in q_data:
                     questions.append(q_data)
             except json.JSONDecodeError:
                 pass
-                
+
         return questions
     except Exception as e:
-        st.error(f"Error parsing special JSON format: {str(e)}")
+        st.error(f"Erro ao processar o JSON especial: {str(e)}")
         return None
 
+
 def load_questions(uploaded_file):
-    """Load questions from a JSON file with error handling"""
     try:
-        # First try normal JSON loading
         data = json.load(uploaded_file)
-        
-        # If the data looks like our special format
+
         if isinstance(data, list) and len(data) > 0 and any("[" in item for item in data[0]):
             questions = parse_special_json(data)
             if questions and len(questions) > 0:
                 return questions
-        
-        # Otherwise process as normal JSON
+
         if isinstance(data, list):
-            # Validate each question has the required fields
             valid_questions = []
             for q in data:
                 if isinstance(q, dict) and "pergunta" in q and "resposta_correta" in q:
-                    # Handle true/false questions
-                    if "tipo" in q and q["tipo"] == "verdadeiro_falso":
+                    tipo = q.get("tipo", "multipla_escolha")
+
+                    if tipo == "verdadeiro_falso":
                         if "opcoes" not in q:
                             q["opcoes"] = ["Verdadeiro", "Falso"]
+
+                        # Converte índice para string correta
+                        if isinstance(q["resposta_correta"], int):
+                            try:
+                                q["resposta_correta"] = q["opcoes"][q["resposta_correta"]]
+                            except IndexError:
+                                continue
+
                         valid_questions.append(q)
-                    # Handle multiple choice questions
-                    elif "opcoes" in q and isinstance(q["opcoes"], list) and len(q["opcoes"]) > 0:
-                        valid_questions.append(q)
-            
-            if valid_questions:
-                return valid_questions
-            else:
-                st.error("No valid questions found in the JSON file")
-                return None
+
+                    elif tipo == "multipla_escolha":
+                        if "opcoes" in q and isinstance(q["opcoes"], list) and len(q["opcoes"]) > 0:
+                            valid_questions.append(q)
+
+            return valid_questions if valid_questions else None
         else:
-            st.error("Invalid format: The JSON should contain an array of questions")
             return None
     except json.JSONDecodeError:
-        st.error("Invalid JSON file. Please upload a valid JSON file.")
+        st.error("Arquivo JSON inválido.")
         return None
     except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
+        st.error(f"Erro ao carregar questões: {str(e)}")
         return None
 
+
 def initialize_session_state(questions):
-    """Initialize all required session state variables"""
     if "current_question" not in st.session_state:
         st.session_state.current_question = 0
-    
     if "questions" not in st.session_state:
         st.session_state.questions = questions
-    
-    # Initialize answer tracking for all questions
+
     for i in range(len(questions)):
         if f"answer_{i}" not in st.session_state:
             st.session_state[f"answer_{i}"] = None
             st.session_state[f"answered_{i}"] = False
 
+
 def show_question_feedback(question, index):
-    """Display feedback after a question is answered"""
     user_answer = st.session_state[f"answer_{index}"]
     is_true_false = question.get("tipo") == "verdadeiro_falso"
-    
-    # Handle true/false feedback
+    is_correct = user_answer == question["resposta_correta"]
+
     if is_true_false:
-        is_correct = user_answer == question["resposta_correta"]
-        correct_text = question["resposta_correta"]
-        
-        # Show feedback
         if is_correct:
-            st.success(f"✅ Correct! The answer is: {correct_text}")
+            st.success(f"✅ Correto! A resposta é: {question['resposta_correta']}")
         else:
-            st.error(f"❌ Incorrect. The correct answer is: {correct_text}")
-    
-    # Handle multiple choice feedback
+            st.error(f"❌ Incorreto. A resposta correta é: {question['resposta_correta']}")
     else:
-        is_correct = user_answer == question["resposta_correta"]
         correct_option = question["opcoes"][question["resposta_correta"]]
-        
-        # Show all options with color feedback
         cols = st.columns(2)
         for i, option in enumerate(question["opcoes"]):
             with cols[i % 2]:
-                # Apply CSS styling directly through markdown
                 if i == question["resposta_correta"]:
-                    st.markdown(f"""
-                    <div style="background-color: #4CAF50; color: white; border-radius: 0.5rem; 
-                    padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">
-                    {option} ✓
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(f"""<div style="background-color: #4CAF50; color: white; border-radius: 0.5rem;
+                    padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">{option} ✓</div>""", unsafe_allow_html=True)
                 elif i == user_answer and not is_correct:
-                    st.markdown(f"""
-                    <div style="background-color: #F44336; color: white; border-radius: 0.5rem; 
-                    padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">
-                    {option} ❌
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(f"""<div style="background-color: #F44336; color: white; border-radius: 0.5rem;
+                    padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">{option} ❌</div>""", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"""
-                    <div style="background-color: #E0E0E0; color: black; border-radius: 0.5rem; 
-                    padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">
-                    {option}
-                    </div>
-                    """, unsafe_allow_html=True)
-        
-        # Show additional feedback
-        if is_correct:
-            st.success("✅ Correct answer!")
-        else:
-            st.error(f"❌ Incorrect. The correct answer is: {correct_option}")
-    
-    # Show explanation if available
+                    st.markdown(f"""<div style="background-color: #E0E0E0; color: black; border-radius: 0.5rem;
+                    padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">{option}</div>""", unsafe_allow_html=True)
+
+        st.success("✅ Correto!") if is_correct else st.error(f"❌ Incorreto. Resposta correta: {correct_option}")
+
     if "explicacao" in question:
-        st.info(f"Explanation: {question['explicacao']}")
+        st.info(f"Explicação: {question['explicacao']}")
+
 
 def show_question_options(question, index):
-    """Display interactive question options"""
     is_true_false = question.get("tipo") == "verdadeiro_falso"
     options = question.get("opcoes", [])
-    
+
     if is_true_false:
-        # Special layout for true/false questions
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Verdadeiro", key=f"button_{index}_true", use_container_width=True):
@@ -172,7 +139,6 @@ def show_question_options(question, index):
                 st.session_state[f"answered_{index}"] = True
                 st.rerun()
     else:
-        # Standard layout for multiple choice
         cols = st.columns(2)
         for i, option in enumerate(options):
             with cols[i % 2]:
@@ -181,101 +147,99 @@ def show_question_options(question, index):
                     st.session_state[f"answered_{index}"] = True
                     st.rerun()
 
+
 def display_question(question, index):
-    """Display a single question with its options"""
     if not isinstance(question, dict) or "pergunta" not in question:
-        st.error(f"Invalid question format for question {index + 1}")
+        st.error(f"Questão {index + 1} com formato inválido.")
         return
-    
-    # Add question type indicator
-    question_type = question.get("tipo", "multipla_escolha")
-    type_badge = "🔘 Múltipla Escolha" if question_type == "multipla_escolha" else "✅❌ Verdadeiro/Falso"
-    
-    st.subheader(f"Question {index + 1}: {question['pergunta']}")
-    st.caption(type_badge)
-    
-    # Initialize question state if not exists
-    if f"answer_{index}" not in st.session_state:
-        st.session_state[f"answer_{index}"] = None
-        st.session_state[f"answered_{index}"] = False
-    
-    # Show either feedback or interactive options
+
+    tipo = question.get("tipo", "multipla_escolha")
+    badge = "✅❌ Verdadeiro/Falso" if tipo == "verdadeiro_falso" else "🔘 Múltipla Escolha"
+
+    st.subheader(f"Questão {index + 1}: {question['pergunta']}")
+    st.caption(badge)
+
+    # DEBUG opcional: ver a estrutura da pergunta
+    # st.json(question)
+
     if st.session_state[f"answered_{index}"]:
         show_question_feedback(question, index)
     else:
         show_question_options(question, index)
 
+
 def show_progress():
-    """Display quiz progress bar"""
     total = len(st.session_state.questions)
     answered = sum(1 for i in range(total) if st.session_state[f"answered_{i}"])
     st.progress(answered / total)
-    st.caption(f"Progress: {answered}/{total} questions answered")
+    st.caption(f"Progresso: {answered}/{total} respondidas")
+
 
 def show_navigation_controls():
-    """Display question navigation controls"""
     total = len(st.session_state.questions)
     col1, col2, col3 = st.columns([1, 1, 1])
-    
+
     with col1:
-        if st.button("⏮ Previous", use_container_width=True) and st.session_state.current_question > 0:
+        if st.button("⏮ Anterior", use_container_width=True) and st.session_state.current_question > 0:
             st.session_state.current_question -= 1
             st.rerun()
-    
+
     with col2:
-        st.write(f"Question {st.session_state.current_question + 1}/{total}")
-    
+        st.write(f"Questão {st.session_state.current_question + 1}/{total}")
+
     with col3:
-        if st.button("Next ⏭", use_container_width=True) and st.session_state.current_question < total - 1:
+        if st.button("Próxima ⏭", use_container_width=True) and st.session_state.current_question < total - 1:
             st.session_state.current_question += 1
             st.rerun()
 
+
 def show_final_score():
-    """Display final score when all questions are answered"""
     total = len(st.session_state.questions)
     correct = 0
-    
+
     for i in range(total):
         question = st.session_state.questions[i]
         user_answer = st.session_state[f"answer_{i}"]
-        
-        # Handle true/false scoring
         if question.get("tipo") == "verdadeiro_falso":
             if user_answer == question["resposta_correta"]:
                 correct += 1
-        # Handle multiple choice scoring
         else:
             if user_answer == question["resposta_correta"]:
                 correct += 1
-    
-    st.success(f"🎉 Quiz completed! Score: {correct}/{total} ({correct/total:.0%})")
+
+    st.success(f"🎉 Você concluiu! Pontuação: {correct}/{total} ({correct/total:.0%})")
     st.balloons()
 
+
 def main():
-    st.title("📝 Quiz Application")
-    
-    uploaded_file = st.file_uploader("Upload your quiz questions (JSON)", type="json")
-    
+    st.title("📝 Quiz Interativo")
+
+    uploaded_file = st.file_uploader("Faça upload do arquivo de questões (JSON)", type="json")
+
     if uploaded_file is not None:
         questions = load_questions(uploaded_file)
-        
-        if questions and len(questions) > 0:
+
+        if questions:
+            # Debug Sidebar
+            st.sidebar.write("📊 Total de questões:", len(questions))
+            st.sidebar.write("✅❌ Verdadeiro/Falso:", sum(1 for q in questions if q.get("tipo") == "verdadeiro_falso"))
+            st.sidebar.write("🔘 Múltipla Escolha:", sum(1 for q in questions if q.get("tipo") == "multipla_escolha"))
+
             initialize_session_state(questions)
             show_progress()
             show_navigation_controls()
-            
-            current_idx = st.session_state.current_question
-            if 0 <= current_idx < len(st.session_state.questions):
-                display_question(st.session_state.questions[current_idx], current_idx)
+
+            current = st.session_state.current_question
+            if 0 <= current < len(questions):
+                display_question(questions[current], current)
             else:
-                st.error("Question index out of range")
-            
-            # Show final score if all questions answered
-            total = len(st.session_state.questions)
-            if all(st.session_state[f"answered_{i}"] for i in range(total)):
+                st.error("Índice da questão fora do intervalo")
+
+            if all(st.session_state[f"answered_{i}"] for i in range(len(questions))):
                 show_final_score()
         else:
-            st.error("Could not load valid questions from the file")
+            st.error("Não foi possível carregar perguntas válidas.")
+
 
 if __name__ == "__main__":
     main()
