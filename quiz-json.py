@@ -3,7 +3,6 @@ import json
 
 st.set_page_config(page_title="Quiz App", page_icon="❓")
 
-
 def parse_special_json(data):
     raw_text = ""
     for item in data:
@@ -35,7 +34,6 @@ def parse_special_json(data):
         st.error(f"Erro ao processar o JSON especial: {str(e)}")
         return None
 
-
 def load_questions(uploaded_file):
     try:
         data = json.load(uploaded_file)
@@ -54,14 +52,11 @@ def load_questions(uploaded_file):
                     if tipo == "verdadeiro_falso":
                         if "opcoes" not in q:
                             q["opcoes"] = ["Verdadeiro", "Falso"]
-
-                        # Converte índice para string correta
                         if isinstance(q["resposta_correta"], int):
                             try:
                                 q["resposta_correta"] = q["opcoes"][q["resposta_correta"]]
                             except IndexError:
                                 continue
-
                         valid_questions.append(q)
 
                     elif tipo == "multipla_escolha":
@@ -78,18 +73,15 @@ def load_questions(uploaded_file):
         st.error(f"Erro ao carregar questões: {str(e)}")
         return None
 
-
 def initialize_session_state(questions):
     if "current_question" not in st.session_state:
         st.session_state.current_question = 0
     if "questions" not in st.session_state:
         st.session_state.questions = questions
-
     for i in range(len(questions)):
         if f"answer_{i}" not in st.session_state:
             st.session_state[f"answer_{i}"] = None
             st.session_state[f"answered_{i}"] = False
-
 
 def show_question_feedback(question, index):
     user_answer = st.session_state[f"answer_{index}"]
@@ -116,11 +108,13 @@ def show_question_feedback(question, index):
                     st.markdown(f"""<div style="background-color: #E0E0E0; color: black; border-radius: 0.5rem;
                     padding: 0.5rem 1rem; margin: 0.25rem 0; text-align: center;">{option}</div>""", unsafe_allow_html=True)
 
-        st.success("✅ Correto!") if is_correct else st.error(f"❌ Incorreto. Resposta correta: {correct_option}")
+        if is_correct:
+            st.success("✅ Correto!")
+        else:
+            st.error(f"❌ Incorreto. Resposta correta: {correct_option}")
 
     if "explicacao" in question:
         st.info(f"Explicação: {question['explicacao']}")
-
 
 def show_question_options(question, index):
     is_true_false = question.get("tipo") == "verdadeiro_falso"
@@ -147,7 +141,6 @@ def show_question_options(question, index):
                     st.session_state[f"answered_{index}"] = True
                     st.rerun()
 
-
 def display_question(question, index):
     if not isinstance(question, dict) or "pergunta" not in question:
         st.error(f"Questão {index + 1} com formato inválido.")
@@ -159,21 +152,16 @@ def display_question(question, index):
     st.subheader(f"Questão {index + 1}: {question['pergunta']}")
     st.caption(badge)
 
-    # DEBUG opcional: ver a estrutura da pergunta
-    # st.json(question)
-
     if st.session_state[f"answered_{index}"]:
         show_question_feedback(question, index)
     else:
         show_question_options(question, index)
-
 
 def show_progress():
     total = len(st.session_state.questions)
     answered = sum(1 for i in range(total) if st.session_state[f"answered_{i}"])
     st.progress(answered / total)
     st.caption(f"Progresso: {answered}/{total} respondidas")
-
 
 def show_navigation_controls():
     total = len(st.session_state.questions)
@@ -192,7 +180,6 @@ def show_navigation_controls():
             st.session_state.current_question += 1
             st.rerun()
 
-
 def show_final_score():
     total = len(st.session_state.questions)
     correct = 0
@@ -210,7 +197,6 @@ def show_final_score():
     st.success(f"🎉 Você concluiu! Pontuação: {correct}/{total} ({correct/total:.0%})")
     st.balloons()
 
-
 def main():
     st.title("📝 Quiz Interativo")
 
@@ -220,7 +206,6 @@ def main():
         questions = load_questions(uploaded_file)
 
         if questions:
-            # Debug Sidebar
             st.sidebar.write("📊 Total de questões:", len(questions))
             st.sidebar.write("✅❌ Verdadeiro/Falso:", sum(1 for q in questions if q.get("tipo") == "verdadeiro_falso"))
             st.sidebar.write("🔘 Múltipla Escolha:", sum(1 for q in questions if q.get("tipo") == "multipla_escolha"))
@@ -239,7 +224,6 @@ def main():
                 show_final_score()
         else:
             st.error("Não foi possível carregar perguntas válidas.")
-
 
 if __name__ == "__main__":
     main()
