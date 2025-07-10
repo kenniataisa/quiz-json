@@ -38,34 +38,36 @@ def load_questions(uploaded_file):
     try:
         data = json.load(uploaded_file)
 
-        if isinstance(data, list) and len(data) > 0 and any("[" in item for item in data[0]):
-            questions = parse_special_json(data)
-            if questions and len(questions) > 0:
-                return questions
+        if not isinstance(data, list):
+            return None
 
-        if isinstance(data, list):
-            valid_questions = []
-            for q in data:
-                if isinstance(q, dict) and "pergunta" in q and "resposta_correta" in q:
-                    tipo = q.get("tipo", "multipla_escolha")
+        valid_questions = []
+        for q in data:
+            # MUDANÇA 1: A condição agora aceita chaves "pergunta" OU "afirmacao"
+            if isinstance(q, dict) and ("pergunta" in q or "afirmacao" in q) and "resposta_correta" in q:
+                tipo = q.get("tipo", "multipla_escolha")
 
-                    if tipo == "verdadeiro_falso":
-                        if "opcoes" not in q:
-                            q["opcoes"] = ["Verdadeiro", "Falso"]
-                        if isinstance(q["resposta_correta"], int):
-                            try:
-                                q["resposta_correta"] = q["opcoes"][q["resposta_correta"]]
-                            except IndexError:
-                                continue
+                if tipo == "verdadeiro_falso":
+                    # MUDANÇA 2: Normaliza o campo "afirmacao" para "pergunta", para que o resto do app funcione
+                    if "afirmacao" in q:
+                        q["pergunta"] = q["afirmacao"]
+                    
+                    if "opcoes" not in q:
+                        q["opcoes"] = ["Verdadeiro", "Falso"]
+
+                    # MUDANÇA 3: Converte a resposta booleana (true/false) para string ("Verdadeiro"/"Falso")
+                    # Isso garante que a comparação com a resposta do botão funcione corretamente.
+                    if isinstance(q["resposta_correta"], bool):
+                        q["resposta_correta"] = "Verdadeiro" if q["resposta_correta"] else "Falso"
+                    
+                    valid_questions.append(q)
+
+                elif tipo == "multipla_escolha":
+                    if "opcoes" in q and isinstance(q["opcoes"], list) and len(q["opcoes"]) > 0:
                         valid_questions.append(q)
 
-                    elif tipo == "multipla_escolha":
-                        if "opcoes" in q and isinstance(q["opcoes"], list) and len(q["opcoes"]) > 0:
-                            valid_questions.append(q)
+        return valid_questions if valid_questions else None
 
-            return valid_questions if valid_questions else None
-        else:
-            return None
     except json.JSONDecodeError:
         st.error("Arquivo JSON inválido.")
         return None
