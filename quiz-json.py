@@ -210,7 +210,7 @@ def main():
         if questions:
             st.sidebar.write("📊 Total de questões:", len(questions))
             st.sidebar.write("✅❌ Verdadeiro/Falso:", sum(1 for q in questions if q.get("tipo") == "verdadeiro_falso"))
-            st.sidebar.write("🔘 Múltipla Escolha:", sum(1 for q in questions if q.get("tipo") == "multipla_escolha"))
+            st.sidebar.write("🔘 Múltipla Escolha:", sum(1 for q in questions if q.get("tipo", "multipla_escolha") == "multipla_escolha"))
 
             initialize_session_state(questions)
             show_progress()
